@@ -8,23 +8,19 @@
 import bpy
 import os
 import json
-import re
+
+# Define the output file base name
+output_filename_base = "my_output_file"
 
 # get the directory of the .blend file
 blend_dir = os.path.dirname(bpy.data.filepath)
+
 
 # get the name of the .blend file
 blend_name = bpy.path.basename(bpy.context.blend_data.filepath)
 
 # get the version number of the .blend file
-blend_version = bpy.data.version[0]
-
-# extract the base name without the extension and version number
-match = re.match(r"(.+)_V\d+", blend_name)
-if match:
-    base_name = match.group(1)
-else:
-    base_name = blend_name[:-6]
+blend_version = bpy.data.version
 
 # create a folder for the output if it doesn't exist
 output_dir = os.path.join(blend_dir, "json")
@@ -75,16 +71,7 @@ for obj in bpy.context.scene.objects:
 data["root"] = root
 
 # create a versioned filename for the output
-output_base_name = f"{base_name}_"
-output_ext = ".json"
-output_filename = f"{output_base_name}{blend_version:02d}{output_ext}"
-
-# check if the file already exists, and increment version number until we find a unique name
-version_num = 0
-while os.path.exists(os.path.join(output_dir, output_filename)):
-    version_num += 1
-    output_filename = f"{output_base_name}{version_num:02d}{output_ext}"
-
+output_filename = f"{output_filename_base}_V1.json"
 output_path = os.path.join(output_dir, output_filename)
 
 # write the data to a JSON file
