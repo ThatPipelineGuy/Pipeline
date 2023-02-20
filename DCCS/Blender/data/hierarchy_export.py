@@ -10,86 +10,95 @@ import os
 import json
 import re
 
-# get the directory of the .blend file
-blend_dir = os.path.dirname(bpy.data.filepath)
+# Define tags for identifying objects
+TAGS = ["XXXX", "XXX", "XX", "X"]
 
-# get the name of the .blend file
+# Get the directory and name of the blend file
+blend_dir = os.path.dirname(bpy.data.filepath)
 blend_name = bpy.path.basename(bpy.context.blend_data.filepath)
 
-# get the version number of the .blend file
-blend_version = bpy.data.version[0]
-
-# extract the base name without the extension and version number
+# Extract the base name without the extension and version number
 match = re.match(r"(.+)_V\d+", blend_name)
 if match:
     base_name = match.group(1)
 else:
-    base_name = blend_name[:-6]
+    base_name = os.path.splitext(blend_name)[0]
 
-# create a folder for the output if it doesn't exist
+# Create a folder for the output if it doesn't exist
 output_dir = os.path.join(blend_dir, "json")
-if not os.path.exists(output_dir):
-    os.makedirs(output_dir)
+os.makedirs(output_dir, exist_ok=True)
 
-# create a dictionary to store the data
+# Create a dictionary to store the data
 data = {}
 
-# create a root container
+# Create a root container
 root = {}
 
-# loop through all the objects in the scene
+# Loop through all the objects in the scene
 for obj in bpy.context.scene.objects:
-    # check if the object's name contains one of the containing tags
+    # Check if the object's name contains one of the containing tags
     containing_tag = None
-    for tag in ["EXT", "INT", "ACE", "PWT"]:
+    for tag in TAGS:
         if tag in obj.name:
             containing_tag = tag
+            print(f"{obj.name} has tag {tag}")
             break
-    # if the object has a containing tag, add it to the root container
+
+    # If the object has a containing tag, add it to the root container
     if containing_tag:
-        # get the identifying parent name
         identifying_parent = obj.name.split("_")[0]
-        # create a container for the object
         if identifying_parent not in root:
             root[identifying_parent] = {}
-        # create a list to store the child objects
-        children = []
-        # loop through all the child objects of the containing object
-        for child in obj.children:
-            # add the name of the child object to the list
-            children.append(child.name)
-        # add the list of child object names to the container
-        root[identifying_parent][obj.name] = children
-    # if the object doesn't have a containing tag, add it to the root container only if it has children
-    elif obj.children:
-        # replace double underscores with single ones in the name
-        name = obj.name.replace("__", "_")
-        # add the object to the root container
-        root[name] = {"children": []}
-        # add the children of the object to the root container
+        root[identifying_parent][obj.name] = {}
+
+        # Add attributes for the child objects (assets)
         for child in obj.children:
             child_name = child.name.replace("__", "_")
-            root[name]["children"].append(child_name)
+            material_name = ""
+            if child.data.materials:
+                material_name = child.data.materials[0].name
+            root[identifying_parent][obj.name][child_name] = {
+                "Mesh Name": child_name,
+                "Mesh Asset": f"{child_name}.uasset",
+                "Material": f"{material_name}.uasset"
+            }
 
-# add the root container to the dictionary
+    # If the object doesn't have a containing tag, add it to the root container only if its parent has a containing tag and it has children
+    elif obj.parent and any(tag in obj.parent.name for tag in TAGS) and obj.children:
+        identifying_parent = obj.parent.name.split("_")[0]
+        if identifying_parent not in root:
+            root[identifying_parent] = {}
+        root[identifying_parent][obj.parent.name] = {}
+
+        # Add attributes for the child objects (assets)
+        for child in obj.children:
+            child_name = child.name.replace("__", "_")
+            material_name = ""
+            if child.data.materials:
+                material_name = child.data.materials[0].name
+            root[identifying_parent][obj.parent.name][child_name] = {
+                "Mesh Name": child_name,
+                "Mesh Asset": f"{child_name}.uasset",
+                "Material": f"{material_name}.uasset"
+            }
+
+# Add the root container to the dictionary
 data["root"] = root
 
-# create a versioned filename for the output
-output_base_name = f"{base_name}_"
+# Create a versioned filename for the output
+version_num = 1
+output_base_name = f"{base_name}_V"
 output_ext = ".json"
-output_filename = f"{output_base_name}{blend_version:02d}{output_ext}"
-
-# check if the file already exists, and increment version number until we find a unique name
-version_num = 0
-while os.path.exists(os.path.join(output_dir, output_filename)):
-    version_num += 1
-    output_filename = f"{output_base_name}{version_num:02d}{output_ext}"
-
+output_filename = f"{output_base_name}{version_num:02d}{output_ext}"
 output_path = os.path.join(output_dir, output_filename)
 
-# write the data to a JSON file
+while os.path.exists(output_path):
+    version_num += 1
+    output_filename = f"{output_base_name}{version_num:02d}{output_ext}"
+    output_path = os.path.join(output_dir, output_filename)
+
+# Write the data to a JSON file
 with open(output_path, "w") as jsonfile:
-    # write the data to the file in JSON format
     json.dump(data, jsonfile, indent=4)
 
 print(f"Data exported to {output_path}")
